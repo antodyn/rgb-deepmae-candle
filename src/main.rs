@@ -8,6 +8,7 @@ fn main() -> anyhow::Result<()> {
     let _log_handle = log4rs::init_config(core::build_log_config(&lnr)?)?;
 
     core::run(&lnr)?;
+    // core::rund(&lnr)?;
 
     println!("{:?}", lnr);
     Ok(())

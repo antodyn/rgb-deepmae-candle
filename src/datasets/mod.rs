@@ -19,10 +19,10 @@ pub enum Split {
 
 fn get_dataset_path(dataset: WhichDataset, split: Split) -> String {
     let p = match dataset {
-        WhichDataset::Original => String::from("/home/infj-t/Space/Walnut/Datasets/Now/O"),
-        WhichDataset::LEnhanced => String::from("/home/infj-t/Space/Walnut/Datasets/Now/L"),
-        WhichDataset::BEnhanced => String::from("/home/infj-t/Space/Walnut/Datasets/Now/b"),
-        WhichDataset::LbEnhanced => String::from("/home/infj-t/Space/Walnut/Datasets/Now/Lb"),
+        WhichDataset::Original => String::from("/home/infj-t/Space/Walnut/Datasets/256/O"),
+        WhichDataset::LEnhanced => String::from("/home/infj-t/Space/Walnut/Datasets/256/L"),
+        WhichDataset::BEnhanced => String::from("/home/infj-t/Space/Walnut/Datasets/256/b"),
+        WhichDataset::LbEnhanced => String::from("/home/infj-t/Space/Walnut/Datasets/256/Lb"),
     };
     log::info!("Load dataset: {:?}", dataset);
     p + match split {

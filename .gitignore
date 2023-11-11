@@ -2,3 +2,5 @@
 .idea/
 tmp/
 Cargo.lock
+src/models/deepmaeback/
+result/

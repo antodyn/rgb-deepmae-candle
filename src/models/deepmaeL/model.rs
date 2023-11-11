@@ -2,7 +2,7 @@ use super::{i2t_64_256, tensor_ops, Block, Image2Tokens, PatchEmbed};
 use candle_core::{DType, IndexOp, Result, Tensor, D};
 use candle_nn::{LayerNorm, Linear, Module, VarBuilder};
 
-pub struct DeepMAE {
+pub struct DeepMAEL {
     i2t: Image2Tokens,
     patch_embed: PatchEmbed,
     encoder_blocks: Vec<Block>,
@@ -24,7 +24,7 @@ pub struct DeepMAE {
     head: Linear,
 }
 const NUM_CLASSES: usize = 4;
-impl DeepMAE {
+impl DeepMAEL {
     pub fn new(
         vb: VarBuilder,
         i2t_c: usize,
@@ -147,18 +147,18 @@ impl DeepMAE {
     }
 }
 // impl Module for DeepMAE {
-impl crate::models::ModelTrait for DeepMAE {
-    fn forward(&self, xs: &Tensor) -> Result<(Tensor, Option<Tensor>)> {
-        let (latent, mask, ids_restore, ids_nokeep) = self.forward_encoder(xs).unwrap();
+impl DeepMAEL {
+    pub fn forward(&self, xs: &Tensor, l_value: Option<&Tensor>) -> Result<(Tensor, Tensor)> {
+        let (latent, mask, ids_restore, ids_nokeep) = self.forward_encoder(xs, l_value).unwrap();
         let pred = self.forward_decoder(&latent, &ids_restore).unwrap();
         let loss = self.forward_loss(xs, &pred, &mask).unwrap();
         let classify = self.forward_classify(&pred, &ids_nokeep).unwrap();
 
-        Ok((classify, Some(loss)))
+        Ok((classify, loss))
     }
 }
 
-impl DeepMAE {
+impl DeepMAEL {
     fn interpolate_pos_encoding(&self, xs: &Tensor, w: usize, h: usize) -> Result<Tensor> {
         // no cat cls token
         let npatch = xs.dim(1).unwrap();
@@ -233,7 +233,11 @@ impl DeepMAE {
 
         Ok((x_maskd, mask, ids_restore, ids_nokeep))
     }
-    fn forward_encoder(&self, xs: &Tensor) -> Result<(Tensor, Tensor, Tensor, Tensor)> {
+    fn forward_encoder(
+        &self,
+        xs: &Tensor,
+        l_value: Option<&Tensor>,
+    ) -> Result<(Tensor, Tensor, Tensor, Tensor)> {
         let (b, _nc, w, h) = xs.dims4().unwrap();
         let xs = self.i2t.forward(xs).unwrap();
         let xs = self.patch_embed.forward(&xs).unwrap();
@@ -245,7 +249,12 @@ impl DeepMAE {
             self.random_masking(&xs, self.mask_ratio).unwrap();
         // after: [batchsize, 64, embed_dim] 64 == 256 * (1-0.75)
         // append cls token
-        let cls_token = (&self.cls_token + self.pos_embed.i((.., ..1, ..))?)?;
+        let cls_token = if l_value.is_some() {
+            let l_value = ((l_value.unwrap() / 100.)? + 1.)?.powf(2.);
+            (&self.cls_token + l_value + self.pos_embed.i((.., ..1, ..))?)?
+        } else {
+            (&self.cls_token + self.pos_embed.i((.., ..1, ..))?)?
+        };
         let broadcast_shape = candle_core::Shape::from_dims(&[b, 1, xs.dim(2).unwrap()]);
         let cls_tokens = cls_token.expand(broadcast_shape)?;
         let mut xs = Tensor::cat(&[cls_tokens, xs], 1)?;
@@ -336,6 +345,11 @@ impl DeepMAE {
             .reshape((xs.dim(0).unwrap(), 3, h * p, w * p))
     }
 
+    // fn calc_pix_loss(&self, target: &Tensor) -> Result<(Tensor, Tensor)> {
+    //     let mean = target.mean_keepdim(D::Minus1).unwrap();
+    //     // let val = target.var(D::Minus1).unwrap();
+    //     Ok((mean, val))
+    // }
     fn forward_loss(&self, xs: &Tensor, pred: &Tensor, mask: &Tensor) -> Result<Tensor> {
         // imgs: [N, 3, H, W]
         // pred: [N, L, p*p*3]
@@ -343,8 +357,10 @@ impl DeepMAE {
         let mut target = self.patchify(xs).unwrap();
         if self.norm_pix_loss {
             let mean = target.mean_keepdim(D::Minus1)?;
-            let var = target.var_keepdim(D::Minus1)?;
-            target = ((target - mean)? / (var + 1e-6)?.sqrt()?)?;
+
+            //         var = target.var(dim=-1, keepdim=True)
+            //         target = (target - mean) / (var + 1.e-6)**.5
+            panic!("can not norm_pix_loss==ture")
         }
 
         let mut loss = pred.sub(&target).unwrap().powf(2.).unwrap();

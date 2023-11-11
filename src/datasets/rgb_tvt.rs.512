@@ -172,7 +172,16 @@ impl Iterator for RGBDataloader {
         let (images, labels) = imglbl
             .par_iter()
             .map(|(img, lbl)| {
-                let img = image::io::Reader::open(img).unwrap().decode().unwrap();
+                let img = image::io::Reader::open(img)
+                    .unwrap()
+                    .decode()
+                    .map_err(candle_core::Error::wrap)
+                    .unwrap()
+                    .resize_to_fill(
+                        RGB_IMAGE_SIZE as u32,
+                        RGB_IMAGE_SIZE as u32,
+                        image::imageops::FilterType::Triangle,
+                    );
                 let img = img.to_rgb8();
                 let data = img.into_raw();
                 (data, *lbl as u8)
